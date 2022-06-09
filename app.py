@@ -1,75 +1,46 @@
-#!/usr/bin/python
-#-*-coding: utf-8 -*-
-##from __future__ import absolute_import
-###
-from flask import Flask, jsonify, render_template, request
-import json
-import numpy as np
+from flask import Flask, request, abort
 
-from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage,TemplateSendMessage,ImageSendMessage, StickerSendMessage, AudioSendMessage
-)
-from linebot.models.template import *
 from linebot import (
     LineBotApi, WebhookHandler
+)
+from linebot.exceptions import (
+    InvalidSignatureError
+)
+from linebot.models import (
+    MessageEvent, TextMessage, TextSendMessage,
 )
 
 app = Flask(__name__)
 
-lineaccesstoken = 'PfPLLZe+HmzRJErTWuMiEzQQZsyeWJvvyHw619BCNTnUqKyMdYlsnfnfJWWoopy2TQ5OUNUQt6gLhRqt5Uqa1moR5BJsJuz7n798DZZcr8s8349CQYlbgW6FdybXL0EWXnq2OnWt+vqWJFpCwcu6fwdB04t89/1O/w1cDnyilFU='
-line_bot_api = LineBotApi(lineaccesstoken)
-
-####################### new ########################
-@app.route('/')
-def index():
-    return "Hello World!"
+line_bot_api = LineBotApi('PfPLLZe+HmzRJErTWuMiEzQQZsyeWJvvyHw619BCNTnUqKyMdYlsnfnfJWWoopy2TQ5OUNUQt6gLhRqt5Uqa1moR5BJsJuz7n798DZZcr8s8349CQYlbgW6FdybXL0EWXnq2OnWt+vqWJFpCwcu6fwdB04t89/1O/w1cDnyilFU=')
+handler = WebhookHandler('4080ebf9ffe5ee6cf28586d1fc321761')
 
 
-@app.route('/webhook', methods=['POST'])
+@app.route("/callback", methods=['POST'])
 def callback():
-    json_line = request.get_json(force=False,cache=False)
-    json_line = json.dumps(json_line)
-    decoded = json.loads(json_line)
-    no_event = len(decoded['events'])
-    for i in range(no_event):
-        event = decoded['events'][i]
-        event_handle(event)
-    return '',200
+    # get X-Line-Signature header value
+    signature = request.headers['X-Line-Signature']
 
+    # get request body as text
+    body = request.get_data(as_text=True)
+    app.logger.info("Request body: " + body)
 
-def event_handle(event):
-    print(event)
+    # handle webhook body
     try:
-        userId = event['source']['userId']
-    except:
-        print('error cannot get userId')
-        return ''
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        print("Invalid signature. Please check your channel access token/channel secret.")
+        abort(400)
 
-    try:
-        rtoken = event['replyToken']
-    except:
-        print('error cannot get rtoken')
-        return ''
-    try:
-        msgId = event["message"]["id"]
-        msgType = event["message"]["type"]
-    except:
-        print('error cannot get msgID, and msgType')
-        sk_id = np.random.randint(1,17)
-        replyObj = StickerSendMessage(package_id=str(1),sticker_id=str(sk_id))
-        line_bot_api.reply_message(rtoken, replyObj)
-        return ''
+    return 'OK'
 
-    if msgType == "text":
-        msg = str(event["message"]["text"])
-        replyObj = TextSendMessage(text=msg)
-        line_bot_api.reply_message(rtoken, replyObj)
 
-    else:
-        sk_id = np.random.randint(1,17)
-        replyObj = StickerSendMessage(package_id=str(1),sticker_id=str(sk_id))
-        line_bot_api.reply_message(rtoken, replyObj)
-    return ''
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=event.message.text))
 
-if __name__ == '__main__':
-    app.run(debug=True)
+
+if __name__ == "__main__":
+    app.run()
